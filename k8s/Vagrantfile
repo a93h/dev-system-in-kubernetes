@@ -11,8 +11,8 @@ Vagrant.configure("2") do |config|
   $num_instances = 5
 
   (1..$num_instances).each do |i|
-
     config.vm.define "k8s-c17-n#{i}" do |node|
+    config.disksize.size = '25GB' # '50GB'
     # Xenial is a bit old but works best at the moment. Kubectl repo seems to be
     # available for Xenial only currently
     # node.vm.box = "ubuntu/xenial64"
@@ -22,14 +22,16 @@ Vagrant.configure("2") do |config|
     node.vm.network "private_network", ip: ip
     # Change the share to match your environment
     # CHANGE!
-    node.vm.synced_folder "G:\\Users\\names\\SyncStuff\\Work\\Development System\\k8s\\SHARE", "/home/vagrant/share"
+    # node.vm.synced_folder "/home/user/repository-name/k8s/SHARE"
+    node.vm.synced_folder "F:\\GitHub\\dev-system-in-kubernetes\\k8s\\SHARE", "/home/vagrant/share"
     # CHANGE!
+    #node.vm.provider 'virtualbox'
     node.vm.provider 'vmware_workstation' do |vb|
       # CHANGE!
-      vb.memory = "8192"
+      vb.memory = "8192" # 4096 # 2048 # 1024
       # K8s requires at least 2 CPUs
       # CHANGE!
-      vb.cpus = 2
+      vb.cpus = 2 # 4, 3, 2, 1
       # vb.name = "k8s-c17-n#{i}"
       # https://www.vagrantup.com/docs/providers/vmware/configuration#provider-settings
       # CHANGE!
@@ -54,7 +56,7 @@ echo "--------------------------------------------------------------------------
 swapoff -a
 sed -i '/swap/s/^/#/' /etc/fstab
 echo "-------------------------------------------------------------------------- Disable firewall"
-ufw disable
+ufw disable # you can enable later if needed
 echo "-------------------------------------------------------------------------- Adding required apt keys and Kubernetes repos"
 wget -qO- https://packages.cloud.google.com/apt/doc/apt-key.gpg > /home/vagrant/apt-key.gpg
 apt-key add /home/vagrant/apt-key.gpg
@@ -62,7 +64,7 @@ echo "apt_preserve_sources_list: true" >> /etc/cloud/cloud.cfg
 apt-add-repository "deb http://apt.kubernetes.io/ kubernetes-xenial main"
 apt-get update
 echo "-------------------------------------------------------------------------- Install SSH keys"
-# wget -qO- https://raw.githubusercontent.com/jonas-werner/pubkeys/master/nopass.pub >> /home/vagrant/.ssh/authorized_keys
+# cat ~/.ssh/key.pub >> /home/vagrant/.ssh/authorized_keys
 echo "-------------------------------------------------------------------------- Installing Kubeadm and Docker"
 apt-get install -y kubeadm=1.21.3-00 kubectl=1.21.3-00 kubelet=1.21.3-00
 ### Install packages to allow apt to use a repository over HTTPS
@@ -120,13 +122,20 @@ if [[ #{i} -eq 1 ]];then
   runuser -l vagrant -c "kubectl apply -f /home/vagrant/share/kube-flannel.yml"
   # metallb
   echo "-------------------------------------------------------------------------- Installing and configuring LoadBalancer"
+  kubectl get configmap kube-proxy -n kube-system -o yaml | \
+    sed -e "s/strictARP: false/strictARP: true/" | \
+    kubectl apply -f - -n kube-system
+  kubectl get configmap kube-proxy -n kube-system -o yaml | \
+    sed -e "s/mode: \"\"/mode: \"ipvs\"/" | \
+    kubectl apply -f - -n kube-system
   runuser -l vagrant -c "helm repo add metallb https://metallb.github.io/metallb"
-  runuser -l vagrant -c "helm install metallb metallb/metallb -f /home/vagrant/share/metallb-values.yaml"
+  runuser -l vagrant -c "helm install metallb metallb/metallb -f /home/vagrant/share/metallb-values.yml"
   # rancher
   echo "-------------------------------------------------------------------------- Preparing rancher"
   runuser -l vagrant -c "helm repo add rancher-stable https://releases.rancher.com/server-charts/stable"
   runuser -l vagrant -c "kubectl create namespace cattle-system"
   runuser -l vagrant -c "helm repo update"
+  # cert manager
   echo "-------------------------------------------------------------------------- Installing cert manager"
   runuser -l vagrant -c "kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.crds.yaml"
   runuser -l vagrant -c "kubectl create namespace cert-manager"
@@ -136,13 +145,18 @@ if [[ #{i} -eq 1 ]];then
     cert-manager jetstack/cert-manager \
     --namespace cert-manager \
     --version v1.0.4"
+  # rancher install
   echo "-------------------------------------------------------------------------- Installing rancher"
   runuser -l vagrant -c "helm install rancher rancher-stable/rancher \
   --namespace cattle-system \
   --set hostname=my.rancher.local"
-  echo "-------------------------------------------------------------------------- Installing traefik"
-  runuser -l vagrant -c "helm repo add traefik https://helm.traefik.io/traefik"
+  runuser -l vagrant -c "kubectl expose deployment rancher --name=rancher-http --type=LoadBalancer --port=8080 --target-port=80 --namespace=cattle-system"
+  runuser -l vagrant -c "kubectl expose deployment rancher --name=rancher-https --type=LoadBalancer --port=8443 --target-port=443 --namespace=cattle-system"
+  # nginx install
+  echo "-------------------------------------------------------------------------- Installing ingress-nginx"
+  runuser -l vagrant -c "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx"
   runuser -l vagrant -c "helm repo update"
+  runuser -l vagrant -c "helm install ingress-nginx ingress-nginx/ingress-nginx"
 fi
 ###### MASTER NODE END ######
 ###### WORKER NODE START ######
