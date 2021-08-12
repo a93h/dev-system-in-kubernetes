@@ -25,3 +25,4 @@ Sources:
  - [Flannel Use IP Address/NIC in Vagrant File](https://stackoverflow.com/questions/47845739/configuring-flannel-to-use-a-non-default-interface-in-kubernetes)
  - [Original Flannel Document](https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml)
  - [Vagrant Disk Size](https://stackoverflow.com/questions/49822594/vagrant-how-to-specify-the-disk-size)
+ - [Rancher Unhealthy Warning](https://github.com/kubernetes/kubeadm/issues/1327)

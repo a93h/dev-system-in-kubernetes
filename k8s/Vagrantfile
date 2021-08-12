@@ -104,6 +104,7 @@ if [[ #{i} -eq 1 ]];then
   echo "-------------------------------------------------------------------------- Configuring Master node"
   systemctl enable kubelet
   systemctl start kubelet
+  kubeadm config images pull
   kubeadm init --apiserver-advertise-address=192.168.17.201 --pod-network-cidr=10.244.0.0/16 | tee /home/vagrant/k8s-install.log
   cat /home/vagrant/k8s-install.log | grep "kubeadm join" > /home/vagrant/share/cluster-join.sh
   echo "--discovery-token-unsafe-skip-ca-verification" >> /home/vagrant/share/cluster-join.sh
